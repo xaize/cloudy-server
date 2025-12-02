@@ -33,6 +33,7 @@ latest_drop = {
     "timestamp": 0
 }
 
+processed_jobs = set()  # Track processed job IDs to avoid duplicates
 discord_client = None
 bot_ready = False
 connection_status = "disconnected"
@@ -90,11 +91,22 @@ async def on_message(message):
     if not all([name, money_str, job_id]):
         return
     
+    # Check for duplicates
+    if job_id in processed_jobs:
+        return
+    
     match = re.search(r'[\d\.]+', money_str)
     if not match:
         return
     
     money_num = float(match.group())
+    
+    # Add to processed set
+    processed_jobs.add(job_id)
+    
+    # Limit set size to prevent memory issues (keep last 1000)
+    if len(processed_jobs) > 1000:
+        processed_jobs.pop()
     
     latest_drop = {
         "job": job_id,
