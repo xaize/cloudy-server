@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python311"]
+
+[phases.install]
+cmds = ["chmod +x build.sh", "./build.sh"]
+
+[start]
+cmd = "gunicorn server:app --workers 1 --threads 2 --timeout 120"
