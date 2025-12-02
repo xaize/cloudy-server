@@ -12,6 +12,7 @@ import threading
 import time
 import os
 from datetime import datetime
+import re
 
 app = Flask(__name__)
 CORS(app)  # Allow cross-origin requests from Roblox
@@ -28,6 +29,7 @@ latest_drop = {
 discord_client = None
 bot_ready = False
 connection_status = "disconnected"
+discord_started = False
 
 # Configuration - Use environment variables for security
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN', '')  # Set in hosting platform
@@ -87,7 +89,6 @@ async def on_message(message):
         return
     
     # Parse money value
-    import re
     match = re.search(r'[\d\.]+', money_str)
     if not match:
         return
@@ -106,10 +107,48 @@ async def on_message(message):
     print(f'📦 NEW DROP: {name} | ${money_num:,.0f}M/s | {players}')
 
 
+# === DISCORD BOT RUNNER ===
+def run_discord_bot():
+    """Run Discord bot in separate thread"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        print(f'🔑 Connecting to Discord...')
+        loop.run_until_complete(discord_client.start(DISCORD_TOKEN))
+    except Exception as e:
+        print(f'❌ Discord Error: {e}')
+        global connection_status
+        connection_status = "error"
+
+
+def start_discord_bot():
+    """Initialize Discord bot on first request"""
+    global discord_started
+    
+    if discord_started:
+        return
+    
+    discord_started = True
+    
+    if not DISCORD_TOKEN:
+        print("❌ ERROR: DISCORD_TOKEN not set!")
+        print("Set it as an environment variable in your hosting platform")
+        return
+    
+    print('🚀 Starting Cloudy Sniper Server...')
+    
+    # Start Discord bot in background thread
+    discord_thread = threading.Thread(target=run_discord_bot, daemon=True)
+    discord_thread.start()
+
+
 # === API ENDPOINTS ===
 @app.route('/')
 def home():
     """Health check endpoint"""
+    start_discord_bot()  # Start Discord on first request
+    
     return jsonify({
         "status": "online",
         "service": "Cloudy Sniper API",
@@ -123,6 +162,8 @@ def home():
 def get_latest_drop():
     """Get the latest job drop - called by Roblox scripts"""
     global latest_drop
+    
+    start_discord_bot()  # Ensure Discord is started
     
     # Clear old drops (older than 10 seconds)
     if latest_drop["timestamp"] > 0 and (time.time() - latest_drop["timestamp"]) > 10:
@@ -140,6 +181,8 @@ def get_latest_drop():
 @app.route('/status')
 def get_status():
     """Get server status"""
+    start_discord_bot()  # Ensure Discord is started
+    
     return jsonify({
         "discord_connected": bot_ready,
         "connection_status": connection_status,
@@ -154,26 +197,11 @@ def health_check():
     return jsonify({"status": "healthy"}), 200
 
 
-# === DISCORD BOT RUNNER ===
-def run_discord_bot():
-    """Run Discord bot in separate thread"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(discord_client.start(DISCORD_TOKEN))
-    except Exception as e:
-        print(f'❌ Discord Error: {e}')
-        global connection_status
-        connection_status = "error"
-
-
 # === STARTUP ===
 if __name__ == '__main__':
-    # Validate token
+    # This runs when using python server.py directly
     if not DISCORD_TOKEN:
         print("❌ ERROR: DISCORD_TOKEN not set!")
-        print("Set it as an environment variable in your hosting platform")
         exit(1)
     
     print('🚀 Starting Cloudy Sniper Server...')
